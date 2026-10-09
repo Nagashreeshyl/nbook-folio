@@ -1,0 +1,528 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-sans: var(--font-jakarta), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+
+  /* Paper surfaces */
+  --color-paper: #f0eee9;
+  --color-paper-dim: #dbdad5;
+  --color-sheet: #fbf9f4;
+  --color-sheet-bright: #ffffff;
+  --color-sheet-low: #f5f3ee;
+  --color-sheet-hover: #eae8e3;
+  --color-sheet-high: #e4e2dd;
+  --color-eggshell: #fdfbf7;
+  --color-parchment: #f7f2e7;
+
+  /* Ink */
+  --color-ink: #080c12;
+  --color-ink-soft: #1b1c19;
+  --color-ink-muted: #45474b;
+  --color-ink-faint: #76777c;
+
+  /* Structure */
+  --color-rule: #c6c6cb;
+  --color-rule-soft: #e5e0d8;
+
+  /* Amber accent */
+  --color-amber: #8c4f10;
+  --color-amber-deep: #763f00;
+  --color-amber-bright: #b4671f;
+  --color-amber-soft: #ffdcc2;
+  --color-amber-ink: #2e1500;
+  --color-amber-mid: #fdad67;
+
+  /* Night / slate */
+  --color-night: #1a1d24;
+  --color-night-deep: #14171d;
+  --color-night-raise: #1e2229;
+  --color-night-line: #2e3440;
+  --color-night-text: #e4e2dd;
+
+  --color-danger: #ba1a1a;
+  --color-teal-ink: #00262a;
+  --color-teal-soft: #a4eff9;
+
+  /* Amber highlight surface — warm tint used for key reveals and banners */
+  --color-amber-light: #fef3e8;
+}
+
+/* ------------------------------------------------------------------ */
+/* Material Symbols                                                    */
+/* ------------------------------------------------------------------ */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-block;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+  vertical-align: middle;
+  font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tactile paper system                                                */
+/* ------------------------------------------------------------------ */
+.tactile-folio-sheet {
+  background-color: #fdfbf7;
+  box-shadow:
+    0 1px 3px 0 rgba(30, 34, 41, 0.04),
+    0 4px 20px -2px rgba(45, 35, 20, 0.08);
+  border: 1px solid #e5e0d8;
+  position: relative;
+}
+
+.tactile-spine-gutter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-start: 18px;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    rgba(140, 79, 16, 0.12) 0%,
+    rgba(140, 79, 16, 0.04) 50%,
+    rgba(140, 79, 16, 0.12) 100%
+  );
+  pointer-events: none;
+}
+
+.canvas-dot-grid {
+  background-color: #fcfaf6;
+  background-image: radial-gradient(#d3cdc4 0.75px, transparent 0.75px);
+  background-size: 14px 14px;
+}
+
+.dark-tactile .tactile-folio-sheet {
+  background-color: #1a1d24;
+  border-color: #2e3440;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+}
+.dark-tactile .tactile-spine-gutter {
+  background: linear-gradient(
+    180deg,
+    rgba(184, 115, 51, 0.25) 0%,
+    rgba(184, 115, 51, 0.08) 50%,
+    rgba(184, 115, 51, 0.25) 100%
+  );
+}
+.dark-tactile .canvas-dot-grid {
+  background-color: #14171d;
+  background-image: radial-gradient(#3b4252 0.75px, transparent 0.75px);
+}
+
+.parchment-tactile .tactile-folio-sheet {
+  background-color: #f7f2e7;
+  border-color: #ded6c5;
+}
+
+/* ------------------------------------------------------------------ */
+/* Notebook typography (reading surface)                               */
+/* ------------------------------------------------------------------ */
+/* Theme palettes are driven entirely by overriding the design tokens on the
+   notebook surface, so every Tailwind utility follows automatically. */
+.parchment-tactile {
+  --color-paper: #e9e0cb;
+  --color-sheet: #f7f2e7;
+  --color-sheet-high: #fffcf3;
+  --color-sheet-low: #f1ebdd;
+  --color-sheet-hover: #f3eee1;
+  --color-ink: #2c2416;
+  --color-ink-soft: #453a26;
+  --color-ink-muted: #6b5c40;
+  --color-ink-faint: #948567;
+  --color-rule: #d5cbb2;
+}
+
+.dark-tactile {
+  --color-paper: #12151b;
+  --color-sheet: #1a1d24;
+  --color-sheet-high: #23262e;
+  --color-sheet-low: #171a20;
+  --color-sheet-hover: #21242c;
+  --color-ink: #f2efe6;
+  --color-ink-soft: #d9d5ca;
+  --color-ink-muted: #a4a196;
+  --color-ink-faint: #75736b;
+  --color-rule: #2e3440;
+  --color-amber-light: #3a2a12;
+  --color-night-raise: #2c3140;
+}
+
+.nb-fs-small {
+  --nb-body: 0.95rem;
+}
+.nb-fs-medium {
+  --nb-body: 1.0625rem;
+}
+.nb-fs-large {
+  --nb-body: 1.1875rem;
+}
+
+:is(.nb-prose, .nb-rich) {
+  font-size: var(--nb-body, 1.0625rem);
+  line-height: 1.7;
+  color: var(--color-ink-soft);
+}
+:is(.nb-prose, .nb-rich) > * + * {
+  margin-top: 0.9rem;
+}
+:is(.nb-prose, .nb-rich) h1,
+:is(.nb-prose, .nb-rich) h2,
+:is(.nb-prose, .nb-rich) h3 {
+  font-family: var(--font-serif);
+  color: var(--color-ink);
+  font-weight: 500;
+  line-height: 1.25;
+  margin-top: 1.5rem;
+}
+:is(.nb-prose, .nb-rich) h1 {
+  font-size: 1.75rem;
+}
+:is(.nb-prose, .nb-rich) h2 {
+  font-size: 1.4rem;
+}
+:is(.nb-prose, .nb-rich) h3 {
+  font-size: 1.2rem;
+}
+:is(.nb-prose, .nb-rich) ul,
+:is(.nb-prose, .nb-rich) ol {
+  padding-inline-start: 1.4rem;
+}
+:is(.nb-prose, .nb-rich) ul {
+  list-style: disc;
+}
+:is(.nb-prose, .nb-rich) ol {
+  list-style: decimal;
+}
+:is(.nb-prose, .nb-rich) li + li {
+  margin-top: 0.3rem;
+}
+:is(.nb-prose, .nb-rich) li p {
+  margin: 0;
+}
+:is(.nb-prose, .nb-rich) a {
+  color: var(--color-amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+:is(.nb-prose, .nb-rich) blockquote {
+  border-inline-start: 3px solid var(--color-amber);
+  padding-inline-start: 1rem;
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--color-ink-muted);
+}
+:is(.nb-prose, .nb-rich) code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--color-sheet-hover);
+  border: 1px solid var(--color-rule-soft);
+  border-radius: 3px;
+  padding: 0.05em 0.35em;
+}
+:is(.nb-prose, .nb-rich) hr {
+  border: none;
+  border-top: 1px solid var(--color-rule);
+  margin: 1.5rem 0;
+}
+:is(.nb-prose, .nb-rich) table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9375rem;
+}
+:is(.nb-prose, .nb-rich) th,
+:is(.nb-prose, .nb-rich) td {
+  border: 1px solid var(--color-rule);
+  padding: 0.5rem 0.7rem;
+  text-align: start;
+  vertical-align: top;
+}
+:is(.nb-prose, .nb-rich) th {
+  background: var(--color-sheet-low);
+  font-weight: 600;
+}
+:is(.nb-prose, .nb-rich) mark {
+  background: var(--color-amber-soft);
+  color: var(--color-amber-ink);
+  padding: 0 0.15em;
+}
+:is(.nb-prose, .nb-rich) ul[data-type="taskList"] {
+  list-style: none;
+  padding-inline-start: 0;
+}
+:is(.nb-prose, .nb-rich) ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+:is(.nb-prose, .nb-rich) ul[data-type="taskList"] li > label {
+  margin-top: 0.25rem;
+}
+:is(.nb-prose, .nb-rich) ul[data-type="taskList"] input[type="checkbox"] {
+  accent-color: var(--color-amber);
+  width: 15px;
+  height: 15px;
+}
+:is(.nb-prose, .nb-rich) p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--color-ink-faint);
+  float: inline-start;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Scrollbars                                                          */
+/* ------------------------------------------------------------------ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d8d2c7;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b5ada0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Page turn animation                                                 */
+/* ------------------------------------------------------------------ */
+@keyframes page-turn-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--page-turn-x, 14px)) rotateY(-3deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) rotateY(0);
+  }
+}
+@keyframes page-flip-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--page-turn-x, 14px)) rotateY(-46deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotateY(0);
+  }
+}
+/* Physical directions: the sheet enters from the side you are leaving. */
+.page-turn {
+  --page-turn-x: 14px;
+  animation: page-turn-in 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transform-origin: left center;
+}
+[dir="rtl"] .page-turn {
+  --page-turn-x: -14px;
+  transform-origin: right center;
+}
+/* `--flip` was the pre-V1 class name for the same animation. */
+.page-turn--realistic,
+.page-turn--flip {
+  animation-name: page-flip-in;
+  animation-duration: 420ms;
+  transform-origin: left center;
+  backface-visibility: hidden;
+}
+[dir="rtl"] .page-turn--realistic,
+[dir="rtl"] .page-turn--flip {
+  transform-origin: right center;
+}
+.page-turn-none {
+  animation: none;
+}
+.page-turn-instant {
+  animation-duration: 1ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-turn {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Print                                                               */
+/* ------------------------------------------------------------------ */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #080c12;
+  }
+  body {
+    margin: 0;
+  }
+  /* Paper artefacts only make sense on screen. */
+  .tactile-folio-sheet,
+  .tactile-spine-gutter {
+    box-shadow: none !important;
+    border: none !important;
+    background: #fff !important;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  /* Keep each block with its heading and avoid mid-block breaks. */
+  .nb-block,
+  .nb-prose h1,
+  .nb-prose h2,
+  .nb-prose h3,
+  .nb-rich {
+    break-inside: avoid;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+  }
+  pre.nb-code,
+  .code-view {
+    white-space: pre-wrap;
+    word-break: break-all;
+    break-inside: avoid;
+  }
+  table {
+    break-inside: auto;
+  }
+  tr,
+  img,
+  svg {
+    break-inside: avoid;
+  }
+  /* Leave a trace of external links on paper. */
+  .nb-prose a[href^="http"]::after,
+  .nb-rich a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #45474b;
+    word-break: break-all;
+  }
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Block editor surfaces                                               */
+/* ------------------------------------------------------------------ */
+
+/* Tailwind v4 ships border-s-2 and border-s-4; 3 px is missing. */
+.border-s-3 {
+  border-inline-start-width: 3px;
+}
+
+.nb-rich {
+  outline: none;
+  min-height: 1.4em;
+  word-break: break-word;
+}
+
+.nb-rich--heading {
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.nb-rich--subheading {
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.nb-block {
+  position: relative;
+}
+
+.nb-block[data-focused="true"]::before,
+.nb-block[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -4px;
+  inset-block: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-amber) 55%, transparent);
+}
+
+.nb-block__actions {
+  /* Always float the toolbar above the block's top-left corner.
+     This avoids any dependency on left-margin clearance, which varies by
+     screen width and is unreliable across block types. */
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: auto;
+  inset-block-end: calc(100% + 3px);
+  display: none;
+  gap: 2px;
+  background: var(--color-sheet);
+  border: 1px solid var(--color-rule);
+  border-radius: 6px;
+  padding: 2px;
+  box-shadow: 0 2px 8px rgba(8, 12, 18, 0.10);
+  z-index: 10;
+}
+
+.nb-block:hover .nb-block__actions,
+.nb-block:focus-within .nb-block__actions,
+.nb-block[data-active="true"] .nb-block__actions {
+  display: flex;
+}
+
+/* Give every block enough top space so the floating toolbar above it
+   never overlaps the previous block's content. */
+.nb-block + .nb-block {
+  margin-top: 2rem;
+}
+
+.code-view pre {
+  margin: 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  padding-inline: 1rem;
+}
+
+.code-view code {
+  font-family: inherit;
+}
+
+.tl-container {
+  --color-background: var(--color-sheet-high);
+}

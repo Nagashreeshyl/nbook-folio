@@ -1,0 +1,14 @@
+node_modules/
+build/
+dist/
+coverage/
+.next/
+.nbook-data/
+tsconfig.tsbuildinfo
+.DS_Store
+*.log
+.env*
+!.env.example
+.nbook-e2e/
+playwright-report/
+test-results/
