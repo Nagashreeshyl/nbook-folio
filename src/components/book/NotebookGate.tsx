@@ -29,7 +29,8 @@ export interface NotebookSessionValue {
   displayName: string | null;
   error: string | null;
   busy: boolean;
-  unlock: (key: string, displayName?: string) => Promise<boolean>;
+  /** Exchange a PIN (4-digit read / 5-digit edit) for a session. */
+  unlock: (pin: string, displayName?: string) => Promise<boolean>;
   logout: () => Promise<void>;
 }
 
@@ -44,6 +45,8 @@ interface SessionResponse {
   role?: Role;
   sessionId?: string;
   displayName?: string;
+  hasReadPin?: boolean;
+  hasEditPin?: boolean;
 }
 
 /** Supplies a fixed session — the demo route presents a read-only guest. */
@@ -60,18 +63,19 @@ export function NotebookSessionProvider({
 /**
  * Resolves notebook access before any notebook UI mounts.
  *
- * Revisit → the signed cookie is re-verified silently. First visit → the
- * access-key prompt. Either path ends with a scoped session in context so no
- * child component ever has to re-check permissions.
+ *  - Public notebook (no PINs) → a viewer session is granted automatically by
+ *    the session endpoint, so the link opens straight into reading.
+ *  - PIN-protected notebook → a PIN entry page (view or edit).
+ *  - Returning visitor → the signed cookie is re-verified silently.
  */
 export function NotebookGate({ slug, children }: { slug: string; children: ReactNode }) {
   const { t } = useI18n();
   const pathname = usePathname();
   // The PIN-unlock route (`/b/<slug>/<4-or-5-digits>`) *is* the unlock step, so
-  // it must render itself instead of the key prompt — it will set the session
-  // cookie and redirect to /read or /edit. Known sub-routes are never PINs.
+  // it renders itself and sets the cookie, then redirects.
   const lastSegment = pathname?.split("/").filter(Boolean).pop() ?? "";
   const isPinUnlock = /^\d{4,5}$/.test(lastSegment);
+
   const [status, setStatus] = useState<GateStatus>("checking");
   const [session, setSession] = useState<{
     bookId: string;
@@ -82,8 +86,9 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [key, setKey] = useState("");
+  const [pin, setPin] = useState("");
   const [name, setName] = useState("");
+  const [pins, setPins] = useState<{ read: boolean; edit: boolean }>({ read: false, edit: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +115,7 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
           });
           setStatus("ready");
         } else {
+          setPins({ read: Boolean(data.hasReadPin), edit: Boolean(data.hasEditPin) });
           setStatus("gate");
         }
       } catch {
@@ -125,7 +131,7 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
   }, [slug, t]);
 
   const unlock = useCallback(
-    async (attemptKey: string, displayName?: string) => {
+    async (attemptPin: string, displayName?: string) => {
       setBusy(true);
       setError(null);
       try {
@@ -134,11 +140,11 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
           role: Role;
           sessionId: string;
           displayName?: string;
-        }>("/api/access", {
+        }>("/api/access/pin", {
           method: "POST",
           body: {
             slug,
-            key: attemptKey.trim(),
+            pin: attemptPin.trim(),
             ...(displayName?.trim() ? { displayName: displayName.trim() } : {}),
           },
         });
@@ -146,17 +152,19 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
           bookId: data.book.id,
           role: data.role,
           sessionId: data.sessionId,
-          // Otherwise the header shows no name until the session endpoint is
-          // re-fetched on the next full page load.
           ...(data.displayName ? { displayName: data.displayName } : {}),
         });
-        setKey("");
+        setPin("");
         setStatus("ready");
         return true;
       } catch (err) {
         if (err instanceof ApiClientError) {
           setError(
-            err.status === 401 ? t("invalidKey") : err.status === 429 ? err.message : err.message,
+            err.status === 401
+              ? t("pinInvalid")
+              : err.status === 429
+                ? t("pinRateLimited")
+                : err.message,
           );
         } else {
           setError(t("errorGeneric"));
@@ -175,7 +183,7 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
     });
     setSession(null);
     setStatus("gate");
-    setKey("");
+    setPin("");
   }, [session?.bookId]);
 
   const value = useMemo<NotebookSessionValue>(
@@ -195,7 +203,6 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
   );
 
   if (isPinUnlock) {
-    // Render the PIN-unlock page directly; it owns the unlock + redirect.
     return <NotebookSessionContext.Provider value={value}>{children}</NotebookSessionContext.Provider>;
   }
 
@@ -215,6 +222,9 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
   }
 
   if (status === "gate") {
+    // A gate without PIN metadata only happens on error / not-found.
+    const expectedLen = pins.edit && !pins.read ? 5 : 4;
+    const bothPins = pins.read && pins.edit;
     return (
       <main className="min-h-dvh px-5 py-10 flex items-center justify-center">
         <div className="w-full max-w-md">
@@ -234,7 +244,7 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
                     {t("notebookNotFound")}
                   </h1>
                   <p className="font-sans text-[13px] text-ink-muted mb-6">
-                    Check the link you were given, or ask the notebook owner to share it again.
+                    {t("notebookNotFoundHint")}
                   </p>
                   <LinkHome />
                 </>
@@ -242,35 +252,42 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
-                    void unlock(key, name);
+                    void unlock(pin, name);
                   }}
                 >
                   <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-amber font-semibold mb-2">
-                    access
+                    {t("protected")}
                   </p>
                   <h1 className="font-serif text-[26px] font-semibold text-ink leading-tight mb-1.5">
-                    {t("unlockTitle")}
+                    {t("enterPinTitle")}
                   </h1>
                   <p className="font-sans text-[13px] text-ink-muted mb-6 leading-relaxed">
-                    {t("unlockSubtitle")}
+                    {bothPins
+                      ? t("enterPinBoth")
+                      : pins.edit && !pins.read
+                        ? t("enterPinEditOnly")
+                        : t("enterPinViewOnly")}
                   </p>
 
                   <div className="space-y-4">
                     <Input
-                      label={t("accessKey")}
-                      placeholder={t("accessKeyPlaceholder")}
-                      value={key}
+                      label={t("pinLabel")}
+                      inputMode="numeric"
+                      pattern="\d*"
+                      placeholder={bothPins ? "4 or 5 digits" : `${expectedLen} digits`}
+                      value={pin}
                       autoFocus
                       spellCheck={false}
                       autoComplete="off"
-                      icon="key"
-                      onChange={(event) => setKey(event.target.value)}
+                      icon="password"
+                      maxLength={5}
+                      onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 5))}
                       error={error}
                     />
                     <Input
-                      label={t("collaborators")}
+                      label={t("displayNameLabel")}
                       hint="optional"
-                      placeholder="How others will see you"
+                      placeholder={t("displayNamePlaceholder")}
                       value={name}
                       maxLength={40}
                       onChange={(event) => setName(event.target.value)}
@@ -284,10 +301,18 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
                     className="w-full mt-6"
                     icon="lock_open"
                     loading={busy}
-                    disabled={!key.trim()}
+                    disabled={pin.trim().length < 4}
                   >
                     {busy ? t("checking") : t("enter")}
                   </Button>
+
+                  <p className="mt-3 font-sans text-[11.5px] text-ink-faint leading-relaxed">
+                    {bothPins
+                      ? t("pinHintBoth")
+                      : pins.edit && !pins.read
+                        ? t("pinHintEdit")
+                        : t("pinHintView")}
+                  </p>
 
                   <div className="mt-5 pt-4 border-t border-rule/70">
                     <LinkHome />

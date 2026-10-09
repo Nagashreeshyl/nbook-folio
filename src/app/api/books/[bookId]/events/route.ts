@@ -25,7 +25,24 @@ export async function GET(request: Request, ctx: { params: Promise<{ bookId: str
       start(controller) {
         const send = (event: BookRealtimeEvent) => {
           try {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            // Never leak PIN hashes to the browser: redact them from the book
+            // payload and expose only whether each PIN is set.
+            let safe: BookRealtimeEvent = event;
+            if (event.type === "book") {
+              const { readPinHash, editPinHash, ...rest } = event.book as typeof event.book & {
+                readPinHash?: string | null;
+                editPinHash?: string | null;
+              };
+              safe = {
+                ...event,
+                book: {
+                  ...rest,
+                  hasReadPin: Boolean(readPinHash),
+                  hasEditPin: Boolean(editPinHash),
+                } as typeof event.book,
+              };
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(safe)}\n\n`));
           } catch {
             /* stream already closed */
           }

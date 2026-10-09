@@ -1,184 +1,173 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createNotebook, unlock } from "./helpers";
+import { createNotebook, unlockWithPin } from "./helpers";
 
-/** Creates a key of the given role as the owner and returns its plaintext. */
-async function mintKey(page: Page, bookId: string, role: "editor" | "viewer") {
-  const response = await page.request.post(`/api/books/${bookId}/keys`, {
-    data: { role },
-  });
-  expect(response.status()).toBe(201);
-  const body = await response.json();
-  return body.plaintext as string;
+/** Sets share PINs as the owner through the API. */
+async function setPins(
+  page: Page,
+  bookId: string,
+  pins: { readPin?: string; editPin?: string },
+) {
+  const response = await page.request.patch(`/api/books/${bookId}`, { data: pins });
+  expect(response.status()).toBe(200);
+  return response.json();
 }
 
-test.describe("share & access", () => {
-  test("documents the revocation policy and never offers to revoke the owner key", async ({
-    page,
-  }) => {
-    const { slug } = await createNotebook(page, "Share policy");
+test.describe("share & access (PIN based)", () => {
+  test("an open notebook (no PIN) opens straight to reading", async ({ browser }) => {
+    const contextOwner = await browser.newContext();
+    const pageOwner = await contextOwner.newPage();
+    const { slug } = await createNotebook(pageOwner, "Open notebook");
+
+    // A brand-new visitor with no session and no PIN set lands in read mode.
+    const anon = await browser.newContext();
+    const anonPage = await anon.newPage();
+    await anonPage.goto(`/b/${slug}`);
+    await anonPage.waitForURL(`**/b/${slug}/read*`);
+    // No PIN prompt is shown.
+    await expect(anonPage.getByLabel("PIN", { exact: true })).toHaveCount(0);
+
+    await contextOwner.close();
+    await anon.close();
+  });
+
+  test("the share page lets the owner set read and edit PINs", async ({ page }) => {
+    const { slug } = await createNotebook(page, "PIN share");
     await page.goto(`/b/${slug}/share`);
 
-    const linkSection = page.locator("section", { hasText: "Notebook link" });
-    await expect(linkSection).toContainText("a revoked key stops working at once");
-    await expect(linkSection).toContainText("12 hours");
+    await expect(page.getByText("Share with a PIN")).toBeVisible();
+    await page.getByLabel("Read PIN (4 digits)").fill("4821");
+    await page.getByLabel("Edit PIN (5 digits)").fill("73920");
+    await page.getByRole("button", { name: "Save PINs" }).click();
 
-    await expect(page.getByText("The owner key was shown once", { exact: false })).toContainText(
-      "cannot be revoked",
-    );
+    await expect(page.getByText("Read link active")).toBeVisible();
+    await expect(page.getByText("Edit link active")).toBeVisible();
+  });
 
-    // Minting through the UI reveals the plaintext exactly once.
-    await page.getByRole("button", { name: "Create key · editor" }).click();
-    const shownOnce = page.locator("div.border-dashed", { hasText: "Shown once" });
-    await expect(shownOnce).toBeVisible();
-    const editorKey = (await shownOnce.locator("code").innerText()).trim();
-    expect(editorKey.startsWith("nbkedt_")).toBe(true);
+  test("a PIN-protected notebook prompts and grants the matching role", async ({ browser }) => {
+    const contextOwner = await browser.newContext();
+    const pageOwner = await contextOwner.newPage();
+    const { slug, bookId } = await createNotebook(pageOwner, "PIN roles");
+    await setPins(pageOwner, bookId, { readPin: "4821", editPin: "73920" });
 
-    // The owner key is listed too — but revoking it would lock the notebook
-    // out of its own settings, so only editor/viewer rows get the button.
-    await expect(page.locator("ul.divide-y li", { hasText: "owner" })).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Revoke" })).toHaveCount(1);
-    await expect(page.getByText("No keys yet")).toHaveCount(0);
+    // 4-digit PIN → viewer (read).
+    const readerCtx = await browser.newContext();
+    const readerPage = await readerCtx.newPage();
+    await unlockWithPin(readerPage, slug, "4821");
+    expect((await readerPage.request.get(`/api/books/${bookId}/tree`)).status()).toBe(200);
+    // Viewer cannot write.
+    expect(
+      (await readerPage.request.post(`/api/books/${bookId}/chapters`, { data: { title: "No" } }))
+        .status(),
+    ).toBe(403);
+
+    // 5-digit PIN → editor (write).
+    const editorCtx = await browser.newContext();
+    const editorPage = await editorCtx.newPage();
+    await unlockWithPin(editorPage, slug, "73920");
+    expect(
+      (await editorPage.request.post(`/api/books/${bookId}/chapters`, { data: { title: "Yes" } }))
+        .status(),
+    ).toBe(201);
+
+    await contextOwner.close();
+    await readerCtx.close();
+    await editorCtx.close();
+  });
+
+  test("the /b/:slug/:pin link unlocks directly", async ({ browser }) => {
+    const contextOwner = await browser.newContext();
+    const pageOwner = await contextOwner.newPage();
+    const { slug, bookId } = await createNotebook(pageOwner, "PIN link");
+    await setPins(pageOwner, bookId, { readPin: "1234", editPin: "56789" });
+
+    const ctx = await browser.newContext();
+    const linkPage = await ctx.newPage();
+    await linkPage.goto(`/b/${slug}/1234`);
+    await linkPage.waitForURL(`**/b/${slug}/read*`);
+    expect((await linkPage.request.get(`/api/books/${bookId}/tree`)).status()).toBe(200);
+
+    const ctx2 = await browser.newContext();
+    const editLinkPage = await ctx2.newPage();
+    await editLinkPage.goto(`/b/${slug}/56789`);
+    await editLinkPage.waitForURL(`**/b/${slug}/edit*`);
+
+    await contextOwner.close();
+    await ctx.close();
+    await ctx2.close();
   });
 
   test("enforces the role matrix server-side", async ({ browser }) => {
     const contextOwner = await browser.newContext();
     const pageOwner = await contextOwner.newPage();
     const { slug, bookId } = await createNotebook(pageOwner, "Role matrix");
-
-    const editorKey = await mintKey(pageOwner, bookId, "editor");
-    const viewerKey = await mintKey(pageOwner, bookId, "viewer");
+    await setPins(pageOwner, bookId, { readPin: "4821", editPin: "73920" });
 
     // Owner keeps manage.
-    expect((await pageOwner.request.get(`/api/books/${bookId}/keys`)).status()).toBe(200);
     expect(
       (await pageOwner.request.patch(`/api/books/${bookId}`, { data: { name: "Renamed" } }))
         .status(),
     ).toBe(200);
 
+    // Anonymous (notebook has PINs) cannot read without unlocking.
     const anonymous = await browser.newContext();
-    expect((await anonymous.request.get(`/api/books/${bookId}/keys`)).status()).toBe(401);
     expect((await anonymous.request.get(`/api/books/${bookId}/tree`)).status()).toBe(401);
     await anonymous.close();
 
+    // Editor (5-digit PIN): structural writes OK, manage denied.
     const contextEditor = await browser.newContext();
     const pageEditor = await contextEditor.newPage();
-    await unlock(pageEditor, slug, editorKey);
-    expect((await pageEditor.request.get(`/api/books/${bookId}/keys`)).status()).toBe(403);
-    expect(
-      (await pageEditor.request.post(`/api/books/${bookId}/keys`, { data: { role: "viewer" } }))
-        .status(),
-    ).toBe(403);
+    await unlockWithPin(pageEditor, slug, "73920");
     expect(
       (await pageEditor.request.patch(`/api/books/${bookId}`, { data: { name: "Nope" } })).status(),
     ).toBe(403);
     expect((await pageEditor.request.delete(`/api/books/${bookId}`)).status()).toBe(403);
-    // …but structural writes stay open to editors.
     expect(
       (await pageEditor.request.post(`/api/books/${bookId}/chapters`, { data: { title: "Notes" } }))
         .status(),
     ).toBe(201);
     expect((await pageEditor.request.get(`/api/books/${bookId}/tree`)).status()).toBe(200);
 
-    await pageEditor.goto(`/b/${slug}/share`);
-    await expect(pageEditor.getByText("Only the notebook owner can see access keys.")).toBeVisible();
-    await expect(pageEditor.getByRole("button", { name: "Create key · editor" })).toHaveCount(0);
-
+    // Viewer (4-digit PIN): read only.
     const contextViewer = await browser.newContext();
     const pageViewer = await contextViewer.newPage();
-    await unlock(pageViewer, slug, viewerKey);
-    expect((await pageViewer.request.get(`/api/books/${bookId}/keys`)).status()).toBe(403);
+    await unlockWithPin(pageViewer, slug, "4821");
     expect(
       (await pageViewer.request.post(`/api/books/${bookId}/chapters`, { data: { title: "No" } }))
         .status(),
     ).toBe(403);
     expect(
-      (await pageViewer.request.post(`/api/books/${bookId}/pages`, { data: { title: "No" } }))
-        .status(),
+      (await pageViewer.request.patch(`/api/books/${bookId}`, { data: { name: "No" } })).status(),
     ).toBe(403);
-    expect((await pageViewer.request.patch(`/api/books/${bookId}`, { data: { name: "No" } })).status()).toBe(
-      403,
-    );
-    // Reading stays open to viewers.
     expect((await pageViewer.request.get(`/api/books/${bookId}/tree`)).status()).toBe(200);
+
+    // Share PINs are owner-only.
+    await pageEditor.goto(`/b/${slug}/share`);
+    await expect(pageEditor.getByText("Only the notebook owner can set share PINs.")).toBeVisible();
 
     await contextOwner.close();
     await contextEditor.close();
     await contextViewer.close();
   });
 
-  test("stops a revoked key from unlocking while its open session lives on", async ({ browser }) => {
+  test("a wrong PIN is rejected and rate-limited", async ({ browser }) => {
     const contextOwner = await browser.newContext();
     const pageOwner = await contextOwner.newPage();
-    const { slug, bookId } = await createNotebook(pageOwner, "Revocation");
+    const { slug, bookId } = await createNotebook(pageOwner, "PIN limits");
+    await setPins(pageOwner, bookId, { readPin: "4821" });
 
-    const viewerKey = await mintKey(pageOwner, bookId, "viewer");
-
-    // A viewer session opened *before* the revocation.
-    const contextViewer = await browser.newContext();
-    const pageViewer = await contextViewer.newPage();
-    await unlock(pageViewer, slug, viewerKey);
-    expect((await pageViewer.request.get(`/api/books/${bookId}/tree`)).status()).toBe(200);
-
-    // Revoke it.
-    const keys = await pageOwner.request
-      .get(`/api/books/${bookId}/keys`)
-      .then((response) => response.json());
-    const viewerRow = (keys.keys as Array<{ id: string; role: string }>).find(
-      (key) => key.role === "viewer",
-    );
-    expect(viewerRow).toBeTruthy();
-    const revoked = await pageOwner.request.delete(
-      `/api/books/${bookId}/keys/${viewerRow!.id}`,
-    );
-    expect(revoked.status()).toBe(200);
-
-    // A fresh unlock fails immediately — this is the security boundary.
-    const rejected = await contextViewer.request.post("/api/access", {
-      data: { slug, key: viewerKey },
-    });
-    expect(rejected.status()).toBe(401);
-    expect((await rejected.json()).error).toContain("revoked");
-
-    // The session signed before revocation keeps working until it expires
-    // (12-hour stateless HMAC — no server-side handle to invalidate).
-    expect((await pageViewer.request.get(`/api/books/${bookId}/tree`)).status()).toBe(200);
-
-    // The gate shows the same message in the UI.
-    const contextFresh = await browser.newContext();
-    const pageFresh = await contextFresh.newPage();
-    await pageFresh.goto(`/b/${slug}`);
-    await pageFresh.getByLabel("Access key").fill(viewerKey);
-    await pageFresh.getByRole("button", { name: "Open notebook" }).click();
-    await expect(pageFresh.getByText("That access key is not valid or has been revoked.")).toBeVisible();
-
-    // The share page marks it revoked and offers no second revocation.
-    await pageOwner.goto(`/b/${slug}/share`);
-    const viewerListRow = pageOwner.locator("ul.divide-y li", { hasText: "viewer" }).first();
-    await expect(viewerListRow).toContainText("Revoked");
-    await expect(viewerListRow.getByRole("button", { name: "Revoke" })).toHaveCount(0);
-
-    await contextOwner.close();
-    await contextViewer.close();
-    await contextFresh.close();
-  });
-
-  test("rate-limits repeated unlock attempts", async ({ page }) => {
-    // Created through the API so the UI's own unlock attempts on this slug
-    // cannot eat into the window.
-    const created = await page.request.post("/api/books", {
-      data: { name: "Unlock limits" },
-    });
-    expect(created.status()).toBe(201);
-    const { slug } = (await created.json()).book as { slug: string };
-
+    const anon = await browser.newContext();
     const statuses: number[] = [];
     for (let attempt = 0; attempt < 9; attempt += 1) {
-      const response = await page.request.post("/api/access", {
-        data: { slug, key: "nbkview_notarealkey000000000000000000" },
+      const response = await anon.request.post("/api/access/pin", {
+        data: { slug, pin: "0000" },
       });
       statuses.push(response.status());
     }
+    // First eight are rejected (401), the ninth trips the limiter (429).
     expect(statuses.slice(0, 8)).toEqual(Array(8).fill(401));
     expect(statuses[8]).toBe(429);
+
+    await contextOwner.close();
+    await anon.close();
   });
 });

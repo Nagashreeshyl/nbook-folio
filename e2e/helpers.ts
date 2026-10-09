@@ -40,8 +40,13 @@ export async function addBlock(page: Page, query: string) {
   const before = await page.locator(".nb-block").count();
   await page.getByRole("button", { name: "Add block" }).last().click();
   await expect(page.getByRole("listbox")).toBeVisible();
-  await page.keyboard.type(query);
-  await page.keyboard.press("Enter");
+  // The palette mounts its search box and focuses it on the next tick; typing
+  // via the page keyboard too early is dropped. Target the input directly and
+  // wait for it to be editable so the query always lands.
+  const search = page.getByRole("listbox").getByRole("textbox");
+  await expect(search).toBeVisible();
+  await search.fill(query);
+  await search.press("Enter");
   await expect(page.getByRole("listbox")).toBeHidden();
   // Creation is a round trip: typing into `.tiptap` too early lands in the
   // previous block's editor.
@@ -56,16 +61,27 @@ export async function waitForSaved(page: Page) {
 }
 
 /**
- * Exchanges an access key through the unlock gate.
+ * Establishes a session for a notebook using an access key.
  *
- * `/b/:slug` 307-redirects to `/read`, so the URL alone cannot tell a finished
- * unlock — wait for the key field to disappear instead.
+ * The gate UI no longer prompts for a key (sharing is PIN-based now), so the
+ * exchange goes straight through the API — this sets the same signed cookie
+ * the UI used to, then we land on the notebook.
  */
 export async function unlock(page: Page, slug: string, key: string) {
+  const response = await page.request.post("/api/access", {
+    data: { slug, key },
+  });
+  expect(response.status()).toBe(200);
+  await page.goto(`/b/${slug}/read`);
+  await page.waitForURL(`**/b/${slug}/**`);
+}
+
+/** Opens a PIN-protected notebook through the gate's PIN entry page. */
+export async function unlockWithPin(page: Page, slug: string, pin: string) {
   await page.goto(`/b/${slug}`);
-  const field = page.getByLabel("Access key");
+  const field = page.getByLabel("PIN", { exact: true });
   await expect(field).toBeVisible();
-  await field.fill(key);
+  await field.fill(pin);
   await page.getByRole("button", { name: "Open notebook" }).click();
   await expect(field).toBeHidden();
   await page.waitForURL(`**/b/${slug}/**`);

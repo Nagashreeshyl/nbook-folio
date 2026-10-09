@@ -231,8 +231,78 @@ export function RichTextEditor({
         </div>
       )}
 
+      {editable && kind === "table" && (
+        <TableToolbar
+          onAddRow={() => exec((e) => e.chain().addRowAfter().run())}
+          onDeleteRow={() => exec((e) => e.chain().deleteRow().run())}
+          onAddColumn={() => exec((e) => e.chain().addColumnAfter().run())}
+          onDeleteColumn={() => exec((e) => e.chain().deleteColumn().run())}
+          onToggleHeaderRow={() => exec((e) => e.chain().toggleHeaderRow().run())}
+        />
+      )}
+
       <EditorContent editor={editor} />
     </div>
+  );
+}
+
+/**
+ * Row/column controls for a table block. Always visible in edit mode so the
+ * author can resize the grid without having to discover a hover affordance;
+ * the Tiptap commands act on the cell the caret is in (or the first cell).
+ */
+function TableToolbar({
+  onAddRow,
+  onDeleteRow,
+  onAddColumn,
+  onDeleteColumn,
+  onToggleHeaderRow,
+}: {
+  onAddRow: () => void;
+  onDeleteRow: () => void;
+  onAddColumn: () => void;
+  onDeleteColumn: () => void;
+  onToggleHeaderRow: () => void;
+}) {
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-1 no-print">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint me-1">
+        Table
+      </span>
+      <TableButton icon="add" label="Add row" onClick={onAddRow} text="Row" />
+      <TableButton icon="remove" label="Delete row" onClick={onDeleteRow} text="Row" />
+      <span className="w-px h-4 bg-rule mx-0.5" />
+      <TableButton icon="add" label="Add column" onClick={onAddColumn} text="Col" />
+      <TableButton icon="remove" label="Delete column" onClick={onDeleteColumn} text="Col" />
+      <span className="w-px h-4 bg-rule mx-0.5" />
+      <TableButton icon="table_rows" label="Toggle header row" onClick={onToggleHeaderRow} text="Header" />
+    </div>
+  );
+}
+
+function TableButton({
+  icon,
+  label,
+  onClick,
+  text,
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  text?: string;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onClick}
+      className="inline-flex items-center gap-1 rounded border border-rule bg-sheet px-2 py-1 text-ink-muted hover:bg-sheet-hover hover:text-ink transition-colors"
+    >
+      <span className="material-symbols-outlined text-[15px]">{icon}</span>
+      {text && <span className="font-mono text-[10px] uppercase">{text}</span>}
+    </button>
   );
 }
 
