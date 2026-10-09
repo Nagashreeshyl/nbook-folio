@@ -253,6 +253,14 @@ function NotebookChrome({
         )}
 
         <main className="flex-1 min-w-0">{children}</main>
+
+        {/* Docked AI sidebar: a real column on large screens so selecting page
+            text stays easy; a slide-over only on small screens. */}
+        <AssistPanel
+          open={assistOpen}
+          onClose={() => setAssistOpen(false)}
+          pageId={pageId}
+        />
       </div>
 
       <SearchDialog
@@ -266,11 +274,6 @@ function NotebookChrome({
         }}
       />
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
-      <AssistPanel
-        open={assistOpen}
-        onClose={() => setAssistOpen(false)}
-        pageId={pageId}
-      />
     </div>
   );
 }

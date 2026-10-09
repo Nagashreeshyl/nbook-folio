@@ -101,13 +101,13 @@ export function buildMessages(input: PromptInput): ChatMessage[] {
     case "flashcards":
       messages.push({
         role: "user",
-        content: `Create 5 study flashcards from the following passage as a JSON array of objects with keys "question" and "answer". Output only JSON.\n\n${selection}`,
+        content: `Create 5 study flashcards from the following passage. Respond with ONLY a JSON array (no prose, no code fence) of objects, each with string keys "question" and "answer".\n\n${selection}`,
       });
       break;
     case "quiz":
       messages.push({
         role: "user",
-        content: `Create a 5-question multiple-choice quiz from the following passage. For each item provide "question", "options" (4) and "answerIndex". Output only JSON.\n\n${selection}`,
+        content: `Create a 5-question multiple-choice quiz from the following passage. Respond with ONLY a JSON array (no prose, no code fence). Each element is an object with keys: "question" (string), "options" (array of exactly 4 strings), "answerIndex" (0-based integer into options), and "explanation" (one short sentence). \n\n${selection}`,
       });
       break;
     case "code_explain":
