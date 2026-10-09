@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -65,6 +66,12 @@ export function NotebookSessionProvider({
  */
 export function NotebookGate({ slug, children }: { slug: string; children: ReactNode }) {
   const { t } = useI18n();
+  const pathname = usePathname();
+  // The PIN-unlock route (`/b/<slug>/<4-or-5-digits>`) *is* the unlock step, so
+  // it must render itself instead of the key prompt — it will set the session
+  // cookie and redirect to /read or /edit. Known sub-routes are never PINs.
+  const lastSegment = pathname?.split("/").filter(Boolean).pop() ?? "";
+  const isPinUnlock = /^\d{4,5}$/.test(lastSegment);
   const [status, setStatus] = useState<GateStatus>("checking");
   const [session, setSession] = useState<{
     bookId: string;
@@ -186,6 +193,11 @@ export function NotebookGate({ slug, children }: { slug: string; children: React
     }),
     [status, session, slug, error, busy, unlock, logout],
   );
+
+  if (isPinUnlock) {
+    // Render the PIN-unlock page directly; it owns the unlock + redirect.
+    return <NotebookSessionContext.Provider value={value}>{children}</NotebookSessionContext.Provider>;
+  }
 
   if (status === "checking") {
     return (

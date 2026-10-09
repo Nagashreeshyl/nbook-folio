@@ -3,9 +3,15 @@ import {
   can,
   generateAccessKey,
   hashAccessKey,
+  hashPin,
+  isValidEditPin,
+  isValidPin,
+  isValidReadPin,
   isWellFormedAccessKey,
+  pinMatchesHash,
   roleAtLeast,
   roleFromAccessKey,
+  roleFromPin,
   signSession,
   verifySession,
 } from "@/lib/access/keys";
@@ -113,5 +119,53 @@ describe("permissions", () => {
     expect(roleAtLeast("owner", "editor")).toBe(true);
     expect(roleAtLeast("editor", "owner")).toBe(false);
     expect(roleAtLeast("viewer", "viewer")).toBe(true);
+  });
+});
+
+describe("share PINs", () => {
+  it("recognises a 4-digit read PIN", () => {
+    expect(isValidReadPin("1234")).toBe(true);
+    expect(isValidReadPin("0000")).toBe(true);
+    expect(isValidReadPin("123")).toBe(false);
+    expect(isValidReadPin("12345")).toBe(false);
+    expect(isValidReadPin("12a4")).toBe(false);
+  });
+
+  it("recognises a 5-digit edit PIN", () => {
+    expect(isValidEditPin("12345")).toBe(true);
+    expect(isValidEditPin("1234")).toBe(false);
+    expect(isValidEditPin("123456")).toBe(false);
+    expect(isValidEditPin("1234x")).toBe(false);
+  });
+
+  it("accepts either length as a valid PIN", () => {
+    expect(isValidPin("1234")).toBe(true);
+    expect(isValidPin("12345")).toBe(true);
+    expect(isValidPin("123")).toBe(false);
+    expect(isValidPin("123456")).toBe(false);
+  });
+
+  it("maps PIN length to role: 4 → viewer, 5 → editor", () => {
+    expect(roleFromPin("4821")).toBe("viewer");
+    expect(roleFromPin("48217")).toBe("editor");
+    expect(roleFromPin("1")).toBeNull();
+    expect(roleFromPin("abcd")).toBeNull();
+  });
+
+  it("hashes to stable 64-char sha256 hex and trims", () => {
+    const h = hashPin("4821");
+    expect(h).toMatch(/^[0-9a-f]{64}$/);
+    expect(hashPin("4821")).toBe(h);
+    expect(hashPin(" 4821 ")).toBe(h);
+    expect(hashPin("4822")).not.toBe(h);
+  });
+
+  it("matches a PIN against its stored hash in constant time", () => {
+    const stored = hashPin("48217");
+    expect(pinMatchesHash("48217", stored)).toBe(true);
+    expect(pinMatchesHash("48216", stored)).toBe(false);
+    expect(pinMatchesHash("48217", null)).toBe(false);
+    expect(pinMatchesHash("48217", undefined)).toBe(false);
+    expect(pinMatchesHash("48217", "")).toBe(false);
   });
 });

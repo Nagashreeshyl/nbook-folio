@@ -156,6 +156,13 @@ export interface Book {
   createdAt: number;
   updatedAt: number;
   settings: BookSettings;
+  /**
+   * Optional URL-shareable PINs. The author sets a 4-digit read PIN and/or a
+   * 5-digit edit PIN; opening `/b/<slug>/<pin>` unlocks the notebook with the
+   * matching role. Only the SHA-256 hash is ever stored — never the digits.
+   */
+  readPinHash?: string | null;
+  editPinHash?: string | null;
 }
 
 export interface Chapter {

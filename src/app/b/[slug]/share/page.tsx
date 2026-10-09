@@ -34,11 +34,31 @@ function ShareBody() {
   const [busy, setBusy] = useState<Role | null>(null);
   const [link, setLink] = useState("");
 
+  // Share-PIN state. We never read PINs back (only hashes are stored); the
+  // boolean flags reflect whether a PIN is currently set.
+  const [readPin, setReadPin] = useState("");
+  const [editPin, setEditPin] = useState("");
+  const [hasReadPin, setHasReadPin] = useState(false);
+  const [hasEditPin, setHasEditPin] = useState(false);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [origin, setOrigin] = useState("");
+
   const owner = notebook.can("manage");
 
   useEffect(() => {
     setLink(`${window.location.origin}/b/${session.slug}`);
+    setOrigin(window.location.origin);
   }, [session.slug]);
+
+  // Load whether PINs are already set from the tree-backed book.
+  useEffect(() => {
+    const book = notebook.book as { hasReadPin?: boolean; hasEditPin?: boolean } | null;
+    if (book) {
+      setHasReadPin(Boolean(book.hasReadPin));
+      setHasEditPin(Boolean(book.hasEditPin));
+    }
+  }, [notebook.book]);
 
   const loadKeys = useCallback(async () => {
     if (!notebook.bookId || !owner) return;
@@ -92,6 +112,68 @@ function ShareBody() {
     }
   }
 
+  async function savePins(event: React.FormEvent) {
+    event.preventDefault();
+    if (!notebook.bookId) return;
+    const r = readPin.trim();
+    const e = editPin.trim();
+    setPinError(null);
+    if ((r && !/^\d{4}$/.test(r)) || (e && !/^\d{5}$/.test(e))) {
+      setPinError(t("pinBadLength"));
+      return;
+    }
+    if (r && e && r === e) {
+      setPinError(t("pinsMustDiffer"));
+      return;
+    }
+    setPinBusy(true);
+    try {
+      const data = await apiRequest<{ book: { hasReadPin: boolean; hasEditPin: boolean } }>(
+        `/api/books/${notebook.bookId}`,
+        {
+          method: "PATCH",
+          // Only send a field when the user typed into it, so saving one PIN
+          // never silently clears the other.
+          body: {
+            ...(r ? { readPin: r } : {}),
+            ...(e ? { editPin: e } : {}),
+          },
+        },
+      );
+      setHasReadPin(data.book.hasReadPin);
+      setHasEditPin(data.book.hasEditPin);
+      setReadPin("");
+      setEditPin("");
+      toast.success(t("pinsSaved"));
+    } catch (error) {
+      setPinError(error instanceof Error ? error.message : t("errorGeneric"));
+    } finally {
+      setPinBusy(false);
+    }
+  }
+
+  async function clearPin(which: "read" | "edit") {
+    if (!notebook.bookId) return;
+    setPinBusy(true);
+    setPinError(null);
+    try {
+      const data = await apiRequest<{ book: { hasReadPin: boolean; hasEditPin: boolean } }>(
+        `/api/books/${notebook.bookId}`,
+        {
+          method: "PATCH",
+          body: which === "read" ? { readPin: null } : { editPin: null },
+        },
+      );
+      setHasReadPin(data.book.hasReadPin);
+      setHasEditPin(data.book.hasEditPin);
+      toast.success(t("pinsSaved"));
+    } catch (error) {
+      setPinError(error instanceof Error ? error.message : t("errorGeneric"));
+    } finally {
+      setPinBusy(false);
+    }
+  }
+
   const section = "border border-rule rounded-xl bg-sheet overflow-hidden";
   const heading =
     "px-5 py-3 border-b border-rule font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint font-semibold";
@@ -124,6 +206,124 @@ function ShareBody() {
             already keeps access until it expires (12 hours).
           </p>
         </section>
+
+        {owner && (
+          <section className={section}>
+            <h2 className={heading}>{t("sharePins")}</h2>
+            <div className="p-5 space-y-5">
+              <p className="font-sans text-[12.5px] text-ink-faint leading-relaxed">
+                {t("sharePinsHint")}
+              </p>
+
+              <form onSubmit={savePins} className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <Input
+                      label={t("readPin")}
+                      inputMode="numeric"
+                      pattern="\d{4}"
+                      maxLength={4}
+                      placeholder={hasReadPin ? "••••" : "e.g. 4821"}
+                      value={readPin}
+                      icon="visibility"
+                      onChange={(event) =>
+                        setReadPin(event.target.value.replace(/\D/g, "").slice(0, 4))
+                      }
+                    />
+                    <div className="mt-1.5 flex items-center gap-2">
+                      {hasReadPin && (
+                        <>
+                          <span className="font-mono text-[10.5px] text-teal-ink uppercase">
+                            {t("readPinSet")}
+                          </span>
+                          <button
+                            type="button"
+                            className="font-mono text-[10.5px] text-ink-faint hover:text-danger underline"
+                            onClick={() => void clearPin("read")}
+                          >
+                            {t("clearPin")}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Input
+                      label={t("editPin")}
+                      inputMode="numeric"
+                      pattern="\d{5}"
+                      maxLength={5}
+                      placeholder={hasEditPin ? "•••••" : "e.g. 73920"}
+                      value={editPin}
+                      icon="edit"
+                      onChange={(event) =>
+                        setEditPin(event.target.value.replace(/\D/g, "").slice(0, 5))
+                      }
+                    />
+                    <div className="mt-1.5 flex items-center gap-2">
+                      {hasEditPin && (
+                        <>
+                          <span className="font-mono text-[10.5px] text-teal-ink uppercase">
+                            {t("editPinSet")}
+                          </span>
+                          <button
+                            type="button"
+                            className="font-mono text-[10.5px] text-ink-faint hover:text-danger underline"
+                            onClick={() => void clearPin("edit")}
+                          >
+                            {t("clearPin")}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {pinError && (
+                  <p className="font-sans text-[13px] text-danger" role="alert">
+                    {pinError}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  variant="primary"
+                  icon="pin"
+                  loading={pinBusy}
+                  disabled={!readPin.trim() && !editPin.trim()}
+                >
+                  {t("savePins")}
+                </Button>
+              </form>
+
+              {(hasReadPin || hasEditPin) && (
+                <div className="space-y-3 pt-1">
+                  {hasReadPin && (
+                    <div className="rounded-lg border border-rule bg-sheet-low p-3">
+                      <p className="font-mono text-[10.5px] uppercase tracking-wider text-ink-faint font-semibold mb-1.5">
+                        {t("readLink")}
+                      </p>
+                      <p className="font-sans text-[12px] text-ink-faint">
+                        {origin}/b/{session.slug}/<span className="text-amber">••••</span>
+                      </p>
+                    </div>
+                  )}
+                  {hasEditPin && (
+                    <div className="rounded-lg border border-rule bg-sheet-low p-3">
+                      <p className="font-mono text-[10.5px] uppercase tracking-wider text-ink-faint font-semibold mb-1.5">
+                        {t("editLink")}
+                      </p>
+                      <p className="font-sans text-[12px] text-ink-faint">
+                        {origin}/b/{session.slug}/<span className="text-amber">•••••</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         <section className={section}>
           <h2 className={heading}>{t("access")}</h2>

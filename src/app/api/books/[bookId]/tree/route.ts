@@ -20,7 +20,14 @@ export async function GET(_request: Request, ctx: { params: Promise<{ bookId: st
       driver.listPresence(bookId),
     ]);
     if (!book) throw notFound("Notebook not found.");
-    return json({ book, chapters, pages, presence, session: { role: session.role } });
+    // Never leak PIN hashes to the client; expose only whether they are set.
+    const { readPinHash, editPinHash, ...safeBookRest } = book;
+    const safeBook = {
+      ...safeBookRest,
+      hasReadPin: Boolean(readPinHash),
+      hasEditPin: Boolean(editPinHash),
+    };
+    return json({ book: safeBook, chapters, pages, presence, session: { role: session.role } });
   } catch (error) {
     return handleError(error);
   }

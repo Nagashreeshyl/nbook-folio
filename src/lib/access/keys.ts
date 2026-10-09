@@ -43,6 +43,59 @@ export function roleFromAccessKey(plaintext: string): Role | null {
 }
 
 /* ------------------------------------------------------------------ */
+/* Share PINs                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * URL-shareable PINs: a 4-digit PIN grants read access, a 5-digit PIN grants
+ * edit access. The author sets both; the two must differ. Only the SHA-256
+ * hash is stored — the digits never touch the database.
+ *
+ * A PIN is far lower entropy than an access key (10^4 / 10^5), so the unlock
+ * endpoint is rate-limited exactly like the key endpoint to make guessing
+ * impractical.
+ */
+export const READ_PIN_LENGTH = 4;
+export const EDIT_PIN_LENGTH = 5;
+
+export function isValidReadPin(pin: string): boolean {
+  return new RegExp(`^\\d{${READ_PIN_LENGTH}}$`).test(pin.trim());
+}
+
+export function isValidEditPin(pin: string): boolean {
+  return new RegExp(`^\\d{${EDIT_PIN_LENGTH}}$`).test(pin.trim());
+}
+
+/** A PIN that could match either role by its digit count. */
+export function isValidPin(pin: string): boolean {
+  return isValidReadPin(pin) || isValidEditPin(pin);
+}
+
+/**
+ * The role a raw PIN maps to by length alone: 4 digits → viewer (read),
+ * 5 digits → editor (write). Returns null for anything else.
+ */
+export function roleFromPin(pin: string): Exclude<Role, "owner"> | null {
+  const value = pin.trim();
+  if (isValidReadPin(value)) return "viewer";
+  if (isValidEditPin(value)) return "editor";
+  return null;
+}
+
+/** SHA-256 hex of a PIN. Mirrors hashAccessKey — digits only ever live in memory. */
+export function hashPin(pin: string): string {
+  return createHash("sha256").update(pin.trim(), "utf8").digest("hex");
+}
+
+/** Constant-time hash comparison so a stored PIN cannot be timing-probed. */
+export function pinMatchesHash(pin: string, storedHash: string | null | undefined): boolean {
+  if (!storedHash) return false;
+  const a = Buffer.from(hashPin(pin));
+  const b = Buffer.from(storedHash);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/* ------------------------------------------------------------------ */
 /* Session tokens                                                      */
 /* ------------------------------------------------------------------ */
 

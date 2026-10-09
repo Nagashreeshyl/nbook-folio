@@ -12,3 +12,5 @@ tsconfig.tsbuildinfo
 .nbook-e2e/
 playwright-report/
 test-results/
+.vercel
+.env*.local
