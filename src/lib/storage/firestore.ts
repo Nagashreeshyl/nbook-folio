@@ -86,12 +86,27 @@ let cachedApp: App | null | undefined;
 function resolveServiceAccount(): Credential | null {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) return null;
+  // The value is JSON. `JSON.parse` already turns the `\n` escapes inside the
+  // private key into real newlines, so we must NOT pre-replace them in the raw
+  // string — doing that injects literal newlines into the JSON and makes it
+  // unparseable. If a provider stored the key double-escaped (`\\n`), the
+  // parsed `private_key` still carries `\n` text, which we normalise after.
+  let parsed: Record<string, unknown>;
   try {
-    const parsed: unknown = JSON.parse(raw.replace(/\\n/g, "\n"));
-    return cert(parsed as ServiceAccount);
+    parsed = JSON.parse(raw) as Record<string, unknown>;
   } catch {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT is not valid JSON");
+    // Fallback for values stored with real newlines in the private key (which
+    // are invalid JSON): escape bare newlines inside the string, then retry.
+    try {
+      parsed = JSON.parse(raw.replace(/\n/g, "\\n")) as Record<string, unknown>;
+    } catch {
+      throw new Error("FIREBASE_SERVICE_ACCOUNT is not valid JSON");
+    }
   }
+  if (typeof parsed.private_key === "string") {
+    parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+  }
+  return cert(parsed as ServiceAccount);
 }
 
 export function isFirestoreConfigured(): boolean {
