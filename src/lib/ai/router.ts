@@ -1,13 +1,14 @@
-import { groqProvider, openRouterProvider } from "./providers";
+import { groqProvider, cerebrasProvider, openRouterProvider } from "./providers";
 import { AIError, type AIProvider, type AIResult, type ChatRequest } from "./types";
 
 /**
  * Ordered provider registry.
  *
  * Adding a provider = implement `AIProvider` and append it here. No call site
- * ever references a vendor directly.
+ * ever references a vendor directly. Fallback order: Groq → Cerebras →
+ * OpenRouter — each is skipped when its API key env var is unset.
  */
-export const providers: AIProvider[] = [groqProvider, openRouterProvider];
+export const providers: AIProvider[] = [groqProvider, cerebrasProvider, openRouterProvider];
 
 export interface RouterOptions {
   /** Provider id to try first (user/book preference). */
@@ -38,7 +39,7 @@ export async function runChat(
   if (configured.length === 0) {
     throw new AIError(
       "not_configured",
-      "No AI provider is configured. Set GROQ_API_KEY or OPENROUTER_API_KEY in the environment.",
+      "No AI provider is configured. Set GROQ_API_KEY, CEREBRAS_API_KEY or OPENROUTER_API_KEY in the environment.",
     );
   }
 

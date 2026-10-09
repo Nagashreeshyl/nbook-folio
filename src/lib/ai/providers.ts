@@ -87,7 +87,18 @@ export const groqProvider = createOpenAICompatProvider({
   url: `${baseUrl("GROQ_BASE_URL", "https://api.groq.com")}/openai/v1/chat/completions`,
   apiKeyEnv: "GROQ_API_KEY",
   modelEnv: "GROQ_MODEL",
-  defaultModel: "llama-3.3-70b-versatile",
+  // Free model on Groq's OpenAI-compatible endpoint.
+  defaultModel: "openai/gpt-oss-20b",
+});
+
+export const cerebrasProvider = createOpenAICompatProvider({
+  id: "cerebras",
+  label: "Cerebras",
+  url: `${baseUrl("CEREBRAS_BASE_URL", "https://api.cerebras.ai")}/v1/chat/completions`,
+  apiKeyEnv: "CEREBRAS_API_KEY",
+  modelEnv: "CEREBRAS_MODEL",
+  // Free-tier model on Cerebras' OpenAI-compatible endpoint.
+  defaultModel: "gpt-oss-120b",
 });
 
 export const openRouterProvider = createOpenAICompatProvider({
@@ -96,7 +107,8 @@ export const openRouterProvider = createOpenAICompatProvider({
   url: `${baseUrl("OPENROUTER_BASE_URL", "https://openrouter.ai")}/api/v1/chat/completions`,
   apiKeyEnv: "OPENROUTER_API_KEY",
   modelEnv: "OPENROUTER_MODEL",
-  defaultModel: "meta-llama/llama-3.3-70b-instruct:free",
+  // Free model (":free" slug) on OpenRouter.
+  defaultModel: "nvidia/nemotron-3-super-120b-a12b:free",
   extraHeaders: {
     "HTTP-Referer": process.env.APP_URL ?? "http://localhost:3000",
     "X-Title": "NBOOK",

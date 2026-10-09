@@ -53,6 +53,30 @@ describe("runChat", () => {
     expect(outcome.fallbacks[0]!.error).toContain("boom");
   });
 
+  it("chains Groq → Cerebras → OpenRouter, landing on the first that works", async () => {
+    const order: string[] = [];
+    providers.push(
+      fakeProvider("groq", async () => {
+        order.push("groq");
+        throw new Error("groq down");
+      }),
+      fakeProvider("cerebras", async () => {
+        order.push("cerebras");
+        return { text: "from cerebras", provider: "cerebras", model: "llama-3.3-70b", elapsedMs: 1 };
+      }),
+      fakeProvider("openrouter", async () => {
+        order.push("openrouter");
+        return { text: "from openrouter", provider: "openrouter", model: "m", elapsedMs: 1 };
+      }),
+    );
+    const outcome = await runChat({ messages: [] });
+    expect(order).toEqual(["groq", "cerebras"]);
+    expect(outcome.provider).toBe("cerebras");
+    expect(outcome.text).toBe("from cerebras");
+    expect(outcome.fallbacks).toHaveLength(1);
+    expect(outcome.fallbacks[0]!.provider).toBe("groq");
+  });
+
   it("honours the preferred provider ordering", async () => {
     const order: string[] = [];
     providers.push(
