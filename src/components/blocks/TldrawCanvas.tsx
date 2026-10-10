@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import {
   Tldraw,
   getSnapshot,
-  loadSnapshot,
   useEditor,
   type Editor,
   type TLEditorSnapshot,
@@ -20,38 +19,19 @@ interface Props {
 
 /** Bridges the tldraw store with the block's persisted snapshot. */
 function CanvasSync({
-  snapshot,
   editable,
   onChange,
 }: {
-  snapshot: CanvasSnapshot | null;
   editable: boolean;
   onChange?: Props["onChange"];
 }) {
   const editor = useEditor();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef<Props["onChange"]>(onChange);
-  const loadedOnce = useRef(false);
   latest.current = onChange;
 
-  // Load the persisted document once the editor exists. Using loadSnapshot is
-  // the supported round-trip for a value produced by getSnapshot().
-  useEffect(() => {
-    if (!editor || loadedOnce.current) return;
-    loadedOnce.current = true;
-    if (snapshot?.store) {
-      try {
-        loadSnapshot(editor.store, snapshot.store as unknown as TLEditorSnapshot);
-      } catch {
-        /* an older/foreign snapshot shape — start blank rather than crash */
-      }
-    }
-    if (!editable) editor.updateInstanceState({ isReadonly: true });
-    // Fit the content into view so a saved drawing is visible immediately.
-    editor.zoomToFit();
-  }, [editor, snapshot, editable]);
-
-  // Persist edits (debounced) back to the block.
+  // Persist edits (debounced) back to the block. Only user-originated changes
+  // save, so programmatic loads never echo back as a write.
   useEffect(() => {
     if (!editor || !editable || !onChange) return;
     const stop = editor.store.listen(
@@ -67,7 +47,7 @@ function CanvasSync({
           } catch {
             /* editor torn down mid-write */
           }
-        }, 500);
+        }, 600);
       },
       { source: "user", scope: "document" },
     );
@@ -82,15 +62,36 @@ function CanvasSync({
 
 export default function TldrawCanvas({ snapshot, editable, onChange }: Props) {
   return (
-    // tldraw fills its positioned parent; `inset-0` makes it occupy the whole
-    // CanvasBlock box so its toolbars dock to the box edges instead of floating.
-    <div className="absolute inset-0">
+    // tldraw renders its own full-size `.tl-container` (position:absolute,
+    // inset:0) into this element, which must therefore be positioned and sized.
+    // The parent CanvasBlock gives it a fixed height; `h-full w-full relative`
+    // here lets tldraw measure a real viewport so its toolbars dock correctly.
+    <div className="tl-embed-root relative h-full w-full">
       <Tldraw
-        onMount={(instance: Editor) => {
-          if (!editable) instance.updateInstanceState({ isReadonly: true });
+        // Hydrate from the saved snapshot at construction time — the supported
+        // way to restore a document produced by getSnapshot(). Loading inside
+        // an effect raced tldraw's own first paint and left the UI mislaid.
+        snapshot={
+          snapshot?.store
+            ? (snapshot.store as unknown as TLEditorSnapshot)
+            : undefined
+        }
+        onMount={(editor: Editor) => {
+          if (!editable) {
+            editor.updateInstanceState({ isReadonly: true });
+          }
+          // Fit any restored content once layout has settled; guard so an
+          // empty canvas (no shapes) is left at the default camera.
+          requestAnimationFrame(() => {
+            try {
+              if (editor.getCurrentPageShapeIds().size > 0) editor.zoomToFit();
+            } catch {
+              /* editor already unmounted */
+            }
+          });
         }}
       >
-        <CanvasSync snapshot={snapshot} editable={editable} onChange={onChange} />
+        <CanvasSync editable={editable} onChange={onChange} />
       </Tldraw>
     </div>
   );

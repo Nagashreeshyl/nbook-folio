@@ -8,6 +8,23 @@ export const runtime = "nodejs";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
+// Without a Firebase Storage bucket, file bytes live in a Firestore document
+// (free Spark plan). Firestore caps a doc at ~1 MiB and base64 inflates by
+// ~33%, so the raw payload must stay under ~700 KB.
+const FIRESTORE_BLOB_CAP = 700 * 1024;
+
+function effectiveLimit(base: number): number {
+  const usingFirestoreBlobs =
+    !process.env.FIREBASE_STORAGE_BUCKET &&
+    Boolean(
+      process.env.FIREBASE_SERVICE_ACCOUNT ||
+        process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+        process.env.FIREBASE_PROJECT_ID ||
+        process.env.FIRESTORE_EMULATOR_HOST,
+    );
+  return usingFirestoreBlobs ? Math.min(base, FIRESTORE_BLOB_CAP) : base;
+}
+
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
 const FILE_TYPES = new Set([
   "application/pdf",
@@ -30,10 +47,12 @@ function sanitiseFilename(name: string): string {
 }
 
 /**
- * Uploads an image or attachment to Firebase Storage (or the local file store
- * when Firebase is not configured) and returns the storage path + URL.
+ * Uploads an image or attachment and returns the storage path + URL.
  *
- * Binary content is never written into Firestore.
+ * Storage backend (chosen by env): Firebase Storage when FIREBASE_STORAGE_BUCKET
+ * is set, otherwise the bytes are kept in a Firestore document as base64 so the
+ * feature works on the free Spark plan (capped at ~700 KB), or the local file
+ * store when Firebase is not configured at all.
  */
 export async function POST(request: Request, ctx: { params: Promise<{ bookId: string }> }) {
   try {
@@ -66,9 +85,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ bookId: st
     if (!isImage && !isAllowedFile) {
       throw badRequest(`Unsupported file type: ${file.type || "unknown"}.`);
     }
-    const limit = isImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
+    const limit = effectiveLimit(isImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES);
     if (file.size > limit) {
-      throw badRequest(`File exceeds the ${Math.round(limit / 1024 / 1024)} MB limit.`);
+      const mb = limit >= 1024 * 1024 ? `${Math.round(limit / 1024 / 1024)} MB` : `${Math.round(limit / 1024)} KB`;
+      throw badRequest(`File exceeds the ${mb} limit.`);
     }
     if (file.size === 0) throw badRequest("File is empty.");
 

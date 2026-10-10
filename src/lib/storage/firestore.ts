@@ -182,6 +182,16 @@ export class FirestoreDriver implements StorageDriver {
     return this.bookRef(bookId).collection("presence");
   }
 
+  /** Top-level collection for Firestore-backed file blobs (free Spark plan). */
+  private filesCol() {
+    return this.db.collection("files");
+  }
+
+  /** A storage path contains "/", which is illegal in a Firestore doc id. */
+  private fileDocId(storagePath: string): string {
+    return storagePath.replace(/\//g, "__");
+  }
+
   async createBook(input: CreateBookInput): Promise<Book> {
     const now = Date.now();
     const id = randomUUID();
@@ -694,18 +704,63 @@ export class FirestoreDriver implements StorageDriver {
   /* ---------------------------------------------------------------- */
 
   async putFile(storagePath: string, file: FilePayload): Promise<StoredFile> {
-    const fileRef = this.bucket().file(storagePath);
-    await fileRef.save(file.data, { contentType: file.mime, resumable: false });
-    await fileRef.makePublic().catch(() => undefined);
+    // Firebase Storage needs a paid (Blaze) plan, so by default we keep file
+    // bytes in Firestore itself as base64 — this works on the free Spark plan.
+    // Firestore caps a document at ~1 MiB; base64 inflates by ~33%, so the raw
+    // payload must stay under ~700 KB. Set FIREBASE_STORAGE_BUCKET to opt into
+    // real Storage for larger media.
+    if (process.env.FIREBASE_STORAGE_BUCKET) {
+      const fileRef = this.bucket().file(storagePath);
+      await fileRef.save(file.data, { contentType: file.mime, resumable: false });
+      await fileRef.makePublic().catch(() => undefined);
+      return {
+        path: storagePath,
+        url: `https://storage.googleapis.com/${this.bucket().name}/${storagePath}`,
+        mime: file.mime,
+        size: file.data.byteLength,
+      };
+    }
+
+    const MAX_FIRESTORE_BYTES = 700 * 1024;
+    if (file.data.byteLength > MAX_FIRESTORE_BYTES) {
+      throw conflict(
+        "This file is too large for free storage (max ~700 KB). Compress it or enable Firebase Storage billing.",
+      );
+    }
+    await this.filesCol()
+      .doc(this.fileDocId(storagePath))
+      .set({
+        path: storagePath,
+        mime: file.mime,
+        size: file.data.byteLength,
+        data: file.data.toString("base64"),
+        createdAt: Date.now(),
+      });
     return {
       path: storagePath,
-      url: `https://storage.googleapis.com/${this.bucket().name}/${storagePath}`,
+      url: `/api/files/${storagePath.split("/").map(encodeURIComponent).join("/")}`,
       mime: file.mime,
       size: file.data.byteLength,
     };
   }
 
   async readFile(storagePath: string): Promise<FilePayload | null> {
+    // Firestore-backed blob first (the free default).
+    try {
+      const snap = await this.filesCol().doc(this.fileDocId(storagePath)).get();
+      if (snap.exists) {
+        const row = snap.data() as { data?: string; mime?: string };
+        if (typeof row.data === "string") {
+          return {
+            data: Buffer.from(row.data, "base64"),
+            mime: row.mime ?? "application/octet-stream",
+          };
+        }
+      }
+    } catch {
+      /* fall through to Storage if configured */
+    }
+    if (!process.env.FIREBASE_STORAGE_BUCKET) return null;
     try {
       const fileRef = this.bucket().file(storagePath);
       const [exists] = await fileRef.exists();
@@ -722,7 +777,13 @@ export class FirestoreDriver implements StorageDriver {
   }
 
   async deleteFile(storagePath: string): Promise<void> {
-    await this.bucket().file(storagePath).delete({ ignoreNotFound: true });
+    await this.filesCol()
+      .doc(this.fileDocId(storagePath))
+      .delete()
+      .catch(() => undefined);
+    if (process.env.FIREBASE_STORAGE_BUCKET) {
+      await this.bucket().file(storagePath).delete({ ignoreNotFound: true });
+    }
   }
 
   /* ---------------------------------------------------------------- */
