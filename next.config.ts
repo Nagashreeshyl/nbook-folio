@@ -36,14 +36,15 @@ const securityHeaders = [
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       // Styles: inline (Tailwind/tldraw) + Google Fonts
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      // Fonts: local + Google Fonts CDN
-      "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
-      // Images: same-origin, data URIs (canvas/tldraw), blob URLs (object URLs)
-      "img-src 'self' data: blob:",
+      // Fonts: local + Google Fonts CDN + tldraw's asset CDN
+      "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com https://cdn.tldraw.com",
+      // Images: same-origin, data URIs (canvas/tldraw), blob URLs, and the
+      // tldraw asset CDN (toolbar/shape icons are SVGs served from there).
+      "img-src 'self' data: blob: https://cdn.tldraw.com",
       // Media/files served via the /api/files proxy
       "media-src 'self' blob:",
-      // SSE connections back to the same origin
-      "connect-src 'self'",
+      // SSE back to the same origin + tldraw asset fetches
+      "connect-src 'self' https://cdn.tldraw.com",
       // No plugins ever
       "object-src 'none'",
       // Prevent <base> injection
