@@ -27,6 +27,7 @@ interface Props {
   blocks: Block[];
   editable: boolean;
   onUpdate: (blockId: string, content: Block["content"]) => void;
+  onSaveSilently?: (blockId: string, content: Block["content"]) => void;
   onCreate: (type: BlockType, afterBlockId?: string) => void;
   onDelete: (blockId: string) => void;
   onDuplicate: (blockId: string) => void;
@@ -55,6 +56,7 @@ export function BlockList({
   blocks,
   editable,
   onUpdate,
+  onSaveSilently,
   onCreate,
   onDelete,
   onDuplicate,
@@ -167,6 +169,9 @@ export function BlockList({
                 block={block}
                 editable
                 onChange={(content) => onUpdate(block.id, content)}
+                {...(onSaveSilently
+                  ? { onSaveSilently: (content: Block["content"]) => onSaveSilently(block.id, content) }
+                  : {})}
               />
             </div>
             )}

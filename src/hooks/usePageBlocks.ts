@@ -32,6 +32,12 @@ export interface PageBlocksApi {
   reload: () => Promise<void>;
   retryFailedWrites: () => void;
   updateBlock: (blockId: string, content: BlockContentByType[BlockType]) => void;
+  /**
+   * Persist a block's content WITHOUT updating React state. For the canvas:
+   * tldraw owns its own state, so echoing a save back through `setBlocks`
+   * re-rendered and blanked the embedded editor. This saves silently.
+   */
+  saveBlockSilently: (blockId: string, content: BlockContentByType[BlockType]) => void;
   createBlock: (type: BlockType, afterBlockId?: string) => Promise<Block | null>;
   deleteBlock: (blockId: string) => Promise<void>;
   duplicateBlock: (blockId: string) => Promise<Block | undefined>;
@@ -232,6 +238,22 @@ export function usePageBlocks(
     [flush],
   );
 
+  // Save without touching React state (used by the canvas — see the type doc).
+  const saveBlockSilently = useCallback(
+    (blockId: string, content: BlockContentByType[BlockType]) => {
+      const existing = pending.current.get(blockId);
+      if (existing) clearTimeout(existing.timer);
+      const baseRev = existing ? existing.baseRev : (revs.current.get(blockId) ?? 0);
+      pending.current.set(blockId, {
+        content,
+        baseRev,
+        attempt: 0,
+        timer: setTimeout(() => void flush(blockId), AUTOSAVE_DELAY_MS),
+      });
+    },
+    [flush],
+  );
+
   const retryFailedWrites = useCallback(() => {
     for (const [blockId, write] of pending.current) {
       clearTimeout(write.timer);
@@ -343,6 +365,7 @@ export function usePageBlocks(
     reload,
     retryFailedWrites,
     updateBlock,
+    saveBlockSilently,
     createBlock,
     deleteBlock,
     duplicateBlock,

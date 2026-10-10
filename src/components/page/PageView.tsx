@@ -171,6 +171,9 @@ export function PageView({
                   blocks={pageBlocks.blocks}
                   editable
                   onUpdate={(blockId, content) => pageBlocks.updateBlock(blockId, content)}
+                  onSaveSilently={(blockId, content) =>
+                    pageBlocks.saveBlockSilently(blockId, content)
+                  }
                   onCreate={(type, after) => void pageBlocks.createBlock(type, after)}
                   onDelete={(blockId) => void pageBlocks.deleteBlock(blockId)}
                   onDuplicate={(blockId) => void pageBlocks.duplicateBlock(blockId)}
