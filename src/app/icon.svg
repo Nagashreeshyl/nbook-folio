@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Paper tile with a subtle archival border -->
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="#f0eee9" stroke="#c6c6cb" stroke-width="1.5"/>
+  <!-- Spine gutter accent, echoing the notebook shell -->
+  <rect x="2" y="2" width="5" height="60" rx="2.5" fill="#8c4f10" opacity="0.14"/>
+  <!-- Serif "N" wordmark letter in ink -->
+  <text x="31" y="46"
+        font-family="Newsreader, 'Times New Roman', Georgia, serif"
+        font-size="46" font-weight="600" text-anchor="middle"
+        fill="#080c12">N</text>
+  <!-- Amber accent dot, the brand's signature mark -->
+  <circle cx="49" cy="44" r="4.5" fill="#8c4f10"/>
+</svg>
