@@ -51,12 +51,10 @@ interface Props {
   block: Block;
   editable: boolean;
   onChange: (content: Block["content"]) => void;
-  /** Canvas-only: persist without a React state update (avoids remounting tldraw). */
-  onSaveSilently?: (content: Block["content"]) => void;
 }
 
 /** Renders a single block's body — wrapper chrome lives in `BlockList`. */
-export function BlockContent({ block, editable, onChange, onSaveSilently }: Props) {
+export function BlockContent({ block, editable, onChange }: Props) {
   const { t } = useI18n();
   const notebook = useNotebookContext();
   const session = useNotebookSession();
@@ -176,17 +174,13 @@ export function BlockContent({ block, editable, onChange, onSaveSilently }: Prop
       return (
         <div className="my-3">
           <CanvasBlock
+            bookId={notebook.bookId ?? session.bookId ?? null}
+            pageId={block.pageId}
+            blockId={block.id}
+            initialRev={block.rev}
             snapshot={content.snapshot}
             height={content.height ?? 320}
             editable={editable}
-            {...(editable
-              ? {
-                  // Save silently so persisting a drawing never re-renders the
-                  // block tree and remounts/blanks tldraw mid-session.
-                  onChange: (next) =>
-                    (onSaveSilently ?? onChange)({ ...content, snapshot: next } as never),
-                }
-              : {})}
           />
         </div>
       );

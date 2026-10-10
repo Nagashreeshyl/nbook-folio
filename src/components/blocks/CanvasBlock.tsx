@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { memo, useRef } from "react";
+import { apiRequest } from "@/lib/api/client";
 import type { CanvasSnapshot } from "@/types/models";
 
 /**
@@ -24,27 +25,71 @@ function CanvasSkeleton() {
 }
 
 interface CanvasBlockProps {
+  bookId: string | null;
+  pageId: string | null;
+  blockId: string;
+  initialRev: number;
   snapshot: CanvasSnapshot | null;
   height?: number;
   editable: boolean;
-  onChange?: (next: CanvasSnapshot | null) => void;
 }
 
 /**
- * Re-render firewall around tldraw.
+ * Self-contained canvas editor.
  *
- * The editor owns its own state once mounted, so re-renders caused by autosave
- * or the realtime stream (which replace the block object every time the canvas
- * saves) must NOT flow into tldraw — a changing snapshot/onChange prop made the
- * embedded editor thrash and blank out. We therefore:
- *   - capture the *initial* snapshot once (ref) and never change it,
- *   - route onChange through a ref so its identity is always stable,
- *   - memo() the component so parent re-renders are a no-op.
+ * tldraw owns its state once mounted, and ANY re-render from the surrounding
+ * block list (autosave state, realtime echoes, dnd-kit reordering) was tearing
+ * the editor down and blanking it mid-session. So this block:
+ *   - takes only primitive, stable props (ids, the initial snapshot, editable),
+ *   - persists drawings by calling the blocks API *directly* from a ref-held
+ *     callback — never through usePageBlocks/setBlocks, so a save can never
+ *     re-render this subtree,
+ *   - tracks its own `rev` locally (it is the sole writer of its own canvas),
+ *   - is memo()'d so parent re-renders are a hard no-op (only an edit/read
+ *     mode flip gets through).
  */
-function CanvasBlockInner({ snapshot, height = 420, editable, onChange }: CanvasBlockProps) {
+function CanvasBlockInner({
+  bookId,
+  pageId,
+  blockId,
+  initialRev,
+  snapshot,
+  height = 420,
+  editable,
+}: CanvasBlockProps) {
   const initialSnapshot = useRef(snapshot);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  const rev = useRef(initialRev);
+  const saving = useRef(false);
+  const queued = useRef<CanvasSnapshot | null>(null);
+
+  // Persist directly to the blocks API, serialised so a save never overlaps.
+  const save = useRef(async (next: CanvasSnapshot | null) => {
+    if (!bookId || !pageId) return;
+    if (saving.current) {
+      queued.current = next;
+      return;
+    }
+    saving.current = true;
+    try {
+      const { block } = await apiRequest<{ block: { rev: number } }>(
+        `/api/books/${bookId}/pages/${pageId}/blocks/${blockId}`,
+        {
+          method: "PATCH",
+          body: { content: { snapshot: next }, baseRev: rev.current },
+        },
+      );
+      rev.current = block.rev;
+    } catch {
+      // Transient failures just drop this frame; the next stroke retries.
+    } finally {
+      saving.current = false;
+      if (queued.current !== null) {
+        const pending = queued.current;
+        queued.current = null;
+        void save.current(pending);
+      }
+    }
+  });
 
   return (
     <div
@@ -54,14 +99,18 @@ function CanvasBlockInner({ snapshot, height = 420, editable, onChange }: Canvas
       <TldrawCanvas
         snapshot={initialSnapshot.current}
         editable={editable}
-        onChange={(next) => onChangeRef.current?.(next)}
+        onChange={(next) => void save.current(next)}
       />
     </div>
   );
 }
 
-/**
- * Only re-render when the mode flips (read ⇄ edit). The snapshot/onChange are
- * deliberately excluded: tldraw is uncontrolled after mount.
- */
-export const CanvasBlock = memo(CanvasBlockInner, (prev, next) => prev.editable === next.editable);
+/** Only re-render when the mode flips. All other parent updates are ignored. */
+export const CanvasBlock = memo(
+  CanvasBlockInner,
+  (prev, next) =>
+    prev.editable === next.editable &&
+    prev.blockId === next.blockId &&
+    prev.bookId === next.bookId &&
+    prev.pageId === next.pageId,
+);
