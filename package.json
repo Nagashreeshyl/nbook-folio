@@ -39,6 +39,7 @@
     "@codemirror/view": "^6.39.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
+    "@excalidraw/excalidraw": "^0.18.0",
     "@lezer/highlight": "^1.2.1",
     "@tiptap/extension-highlight": "^2.14.1",
     "@tiptap/extension-link": "^2.14.1",

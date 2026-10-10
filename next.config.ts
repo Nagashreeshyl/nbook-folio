@@ -32,19 +32,20 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      // Scripts: Next.js + third-party fonts via Google APIs
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      // Styles: inline (Tailwind/tldraw) + Google Fonts
+      // Scripts: Next.js + Excalidraw web workers (blob:)
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+      // Styles: inline (Tailwind/Excalidraw) + Google Fonts
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      // Fonts: local + Google Fonts CDN + tldraw's asset CDN
-      "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com https://cdn.tldraw.com",
-      // Images: same-origin, data URIs (canvas/tldraw), blob URLs, and the
-      // tldraw asset CDN (toolbar/shape icons are SVGs served from there).
-      "img-src 'self' data: blob: https://cdn.tldraw.com",
+      // Fonts: local + Google Fonts + Excalidraw's font CDN (esm.sh)
+      "font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com https://esm.sh",
+      // Images: same-origin, data URIs (canvas export), blob URLs
+      "img-src 'self' data: blob:",
       // Media/files served via the /api/files proxy
       "media-src 'self' blob:",
-      // SSE back to the same origin + tldraw asset fetches
-      "connect-src 'self' https://cdn.tldraw.com",
+      // SSE back to the same origin + Excalidraw font fetches from esm.sh
+      "connect-src 'self' https://esm.sh",
+      // Excalidraw spins up web workers from blob URLs
+      "worker-src 'self' blob:",
       // No plugins ever
       "object-src 'none'",
       // Prevent <base> injection

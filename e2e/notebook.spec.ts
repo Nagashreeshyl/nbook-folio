@@ -74,7 +74,7 @@ test.describe("writing in a notebook", () => {
     await expect(page.locator(".katex").first()).toBeVisible();
 
     await addBlock(page, "Canvas");
-    await expect(page.locator(".tl-container").first()).toBeVisible({ timeout: 45_000 });
+    await expect(page.locator(".excalidraw").first()).toBeVisible({ timeout: 45_000 });
   });
 
   test("searches saved text and downloads a markdown export", async ({ page }) => {

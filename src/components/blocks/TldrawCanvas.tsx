@@ -1,14 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import {
-  Tldraw,
-  getSnapshot,
-  useEditor,
-  type Editor,
-  type TLEditorSnapshot,
-} from "tldraw";
-import "tldraw/tldraw.css";
+import { useRef } from "react";
+import { Excalidraw } from "@excalidraw/excalidraw";
+import "@excalidraw/excalidraw/index.css";
 import type { CanvasSnapshot } from "@/types/models";
 
 interface Props {
@@ -18,80 +12,70 @@ interface Props {
 }
 
 /**
- * Bridges the tldraw store with the block's persisted snapshot.
+ * Excalidraw canvas surface.
  *
- * Subscribes exactly once per editor and routes saves through a ref, so a
- * parent re-render (autosave / realtime upsert) never re-subscribes or tears
- * the listener down — that churn is what blanked the canvas mid-session.
+ * Excalidraw is MIT-licensed and fully free in production (no license key, no
+ * teardown) — unlike tldraw 4.x, whose production license check blanked the
+ * embedded editor on the deployed domain.
+ *
+ * The persisted snapshot stores Excalidraw's `{elements, appState, files}`
+ * under `snapshot.store`, matching the existing CanvasSnapshot shape so no
+ * data migration is needed. appState is trimmed to the serialisable bits.
  */
-function CanvasSync({
-  editable,
-  onChange,
-}: {
-  editable: boolean;
-  onChange?: Props["onChange"];
-}) {
-  const editor = useEditor();
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+export default function TldrawCanvas({ snapshot, editable, onChange }: Props) {
   const latest = useRef<Props["onChange"]>(onChange);
   latest.current = onChange;
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (!editor || !editable) return;
-    const stop = editor.store.listen(
-      () => {
-        if (timer.current) clearTimeout(timer.current);
-        timer.current = setTimeout(() => {
-          try {
-            const next = getSnapshot(editor.store);
-            latest.current?.({
-              schemaVersion: 1,
-              store: next as unknown as Record<string, unknown>,
-            });
-          } catch {
-            /* editor torn down mid-write */
-          }
-        }, 800);
-      },
-      { source: "user", scope: "document" },
-    );
-    return () => {
-      stop();
-      if (timer.current) clearTimeout(timer.current);
-    };
-    // Intentionally only `editor` + `editable`: `onChange` is read via a ref so
-    // its changing identity never re-subscribes the store listener.
-  }, [editor, editable]);
+  const store = (snapshot?.store ?? null) as {
+    elements?: unknown;
+    appState?: Record<string, unknown>;
+    files?: unknown;
+  } | null;
 
-  return null;
-}
-
-export default function TldrawCanvas({ snapshot, editable, onChange }: Props) {
-  // Capture the initial snapshot once; tldraw is uncontrolled afterwards.
-  const initial = useRef(
-    snapshot?.store ? (snapshot.store as unknown as TLEditorSnapshot) : undefined,
-  );
+  const initialData = store?.elements
+    ? {
+        elements: store.elements as never,
+        appState: {
+          ...(store.appState ?? {}),
+          // Never persist/collapse to a zero viewport.
+          collaborators: new Map(),
+        } as never,
+        files: (store.files ?? {}) as never,
+        scrollToContent: true,
+      }
+    : undefined;
 
   return (
-    // tldraw renders its own full-size `.tl-container` (absolute, inset:0) into
-    // this element, so it must be positioned and sized — the parent gives it a
-    // fixed height.
-    <div className="tl-embed-root relative h-full w-full">
-      <Tldraw
-        snapshot={initial.current}
-        onMount={(editor: Editor) => {
-          if (!editable) editor.updateInstanceState({ isReadonly: true });
-          requestAnimationFrame(() => {
+    <div className="excalidraw-embed h-full w-full">
+      <Excalidraw
+        initialData={initialData}
+        viewModeEnabled={!editable}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onChange={(elements: any, appState: any, files: any) => {
+          if (!editable || !latest.current) return;
+          if (timer.current) clearTimeout(timer.current);
+          timer.current = setTimeout(() => {
             try {
-              if (editor.getCurrentPageShapeIds().size > 0) editor.zoomToFit();
+              // Strip transient/huge fields; keep what redraws the scene.
+              const slimAppState = {
+                viewBackgroundColor: appState?.viewBackgroundColor,
+                gridSize: appState?.gridSize ?? null,
+              };
+              latest.current?.({
+                schemaVersion: 2,
+                store: {
+                  elements,
+                  appState: slimAppState,
+                  files: files ?? {},
+                } as unknown as Record<string, unknown>,
+              });
             } catch {
-              /* editor already unmounted */
+              /* ignore a serialise failure for this frame */
             }
-          });
+          }, 800);
         }}
-      >
-        <CanvasSync editable={editable} onChange={onChange} />
-      </Tldraw>
+      />
     </div>
   );
 }
