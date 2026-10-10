@@ -17,7 +17,13 @@ interface Props {
   onChange?: (next: CanvasSnapshot | null) => void;
 }
 
-/** Bridges the tldraw store with the block's persisted snapshot. */
+/**
+ * Bridges the tldraw store with the block's persisted snapshot.
+ *
+ * Subscribes exactly once per editor and routes saves through a ref, so a
+ * parent re-render (autosave / realtime upsert) never re-subscribes or tears
+ * the listener down — that churn is what blanked the canvas mid-session.
+ */
 function CanvasSync({
   editable,
   onChange,
@@ -30,10 +36,8 @@ function CanvasSync({
   const latest = useRef<Props["onChange"]>(onChange);
   latest.current = onChange;
 
-  // Persist edits (debounced) back to the block. Only user-originated changes
-  // save, so programmatic loads never echo back as a write.
   useEffect(() => {
-    if (!editor || !editable || !onChange) return;
+    if (!editor || !editable) return;
     const stop = editor.store.listen(
       () => {
         if (timer.current) clearTimeout(timer.current);
@@ -47,7 +51,7 @@ function CanvasSync({
           } catch {
             /* editor torn down mid-write */
           }
-        }, 600);
+        }, 800);
       },
       { source: "user", scope: "document" },
     );
@@ -55,33 +59,28 @@ function CanvasSync({
       stop();
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [editor, editable, onChange]);
+    // Intentionally only `editor` + `editable`: `onChange` is read via a ref so
+    // its changing identity never re-subscribes the store listener.
+  }, [editor, editable]);
 
   return null;
 }
 
 export default function TldrawCanvas({ snapshot, editable, onChange }: Props) {
+  // Capture the initial snapshot once; tldraw is uncontrolled afterwards.
+  const initial = useRef(
+    snapshot?.store ? (snapshot.store as unknown as TLEditorSnapshot) : undefined,
+  );
+
   return (
-    // tldraw renders its own full-size `.tl-container` (position:absolute,
-    // inset:0) into this element, which must therefore be positioned and sized.
-    // The parent CanvasBlock gives it a fixed height; `h-full w-full relative`
-    // here lets tldraw measure a real viewport so its toolbars dock correctly.
+    // tldraw renders its own full-size `.tl-container` (absolute, inset:0) into
+    // this element, so it must be positioned and sized — the parent gives it a
+    // fixed height.
     <div className="tl-embed-root relative h-full w-full">
       <Tldraw
-        // Hydrate from the saved snapshot at construction time — the supported
-        // way to restore a document produced by getSnapshot(). Loading inside
-        // an effect raced tldraw's own first paint and left the UI mislaid.
-        snapshot={
-          snapshot?.store
-            ? (snapshot.store as unknown as TLEditorSnapshot)
-            : undefined
-        }
+        snapshot={initial.current}
         onMount={(editor: Editor) => {
-          if (!editable) {
-            editor.updateInstanceState({ isReadonly: true });
-          }
-          // Fit any restored content once layout has settled; guard so an
-          // empty canvas (no shapes) is left at the default camera.
+          if (!editable) editor.updateInstanceState({ isReadonly: true });
           requestAnimationFrame(() => {
             try {
               if (editor.getCurrentPageShapeIds().size > 0) editor.zoomToFit();

@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { memo, useRef } from "react";
 import type { CanvasSnapshot } from "@/types/models";
 
 /**
@@ -22,27 +23,45 @@ function CanvasSkeleton() {
   );
 }
 
-export function CanvasBlock({
-  snapshot,
-  height = 420,
-  editable,
-  onChange,
-}: {
+interface CanvasBlockProps {
   snapshot: CanvasSnapshot | null;
   height?: number;
   editable: boolean;
   onChange?: (next: CanvasSnapshot | null) => void;
-}) {
-  // tldraw positions its toolbars/menus with `position: absolute` against the
-  // nearest positioned ancestor, so the wrapper MUST be `relative` and have a
-  // real height — otherwise the panels float out of the box (the bug in the
-  // screenshot). A sensible minimum keeps the editor usable on a short block.
+}
+
+/**
+ * Re-render firewall around tldraw.
+ *
+ * The editor owns its own state once mounted, so re-renders caused by autosave
+ * or the realtime stream (which replace the block object every time the canvas
+ * saves) must NOT flow into tldraw — a changing snapshot/onChange prop made the
+ * embedded editor thrash and blank out. We therefore:
+ *   - capture the *initial* snapshot once (ref) and never change it,
+ *   - route onChange through a ref so its identity is always stable,
+ *   - memo() the component so parent re-renders are a no-op.
+ */
+function CanvasBlockInner({ snapshot, height = 420, editable, onChange }: CanvasBlockProps) {
+  const initialSnapshot = useRef(snapshot);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
   return (
     <div
-      className="tldraw-embed relative rounded-lg border border-rule overflow-hidden bg-sheet"
+      className="tldraw-embed relative rounded-lg border border-rule overflow-hidden bg-sheet isolate"
       style={{ height: Math.max(height, editable ? 420 : 260) }}
     >
-      <TldrawCanvas snapshot={snapshot} editable={editable} onChange={onChange} />
+      <TldrawCanvas
+        snapshot={initialSnapshot.current}
+        editable={editable}
+        onChange={(next) => onChangeRef.current?.(next)}
+      />
     </div>
   );
 }
+
+/**
+ * Only re-render when the mode flips (read ⇄ edit). The snapshot/onChange are
+ * deliberately excluded: tldraw is uncontrolled after mount.
+ */
+export const CanvasBlock = memo(CanvasBlockInner, (prev, next) => prev.editable === next.editable);
