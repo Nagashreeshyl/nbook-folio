@@ -195,7 +195,15 @@ export function usePageBlocks(
             return prev.filter((block) => !event.items.some((item) => item.id === block.id));
           }
           const map = new Map(prev.map((block) => [block.id, block]));
-          for (const item of event.items) map.set(item.id, item);
+          for (const item of event.items) {
+            // Never let the realtime echo overwrite a block the user is still
+            // editing locally (a pending/in-flight write). Doing so replaces
+            // the block object mid-edit — which, for the canvas, remounts the
+            // tldraw subtree and blanks the editor. The local copy is the
+            // source of truth until its own save settles.
+            if (pending.current.has(item.id) || inFlight.current.has(item.id)) continue;
+            map.set(item.id, item);
+          }
           return [...map.values()].sort((a, b) => a.order - b.order);
         });
       },
